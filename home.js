@@ -1,5 +1,7 @@
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
-import { auth } from "./config.js";
+import { collection, addDoc, getDocs, deleteDoc, updateDoc, Timestamp, query, orderBy, doc } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import { auth, db } from "./config.js";
+
 const logoutBtn = document.querySelector("#Logout-btn");
 
 onAuthStateChanged(auth, (user) => {
@@ -22,46 +24,91 @@ logoutBtn.addEventListener('click', () => {
 
 const todoInput = document.querySelector("#input");
 const lists = document.querySelector("#lists");
-const todoArr = [];
+let todoArr = [];
 const todoBtn = document.querySelector("#todo-btn");
-function renderTodoList() {
+
+const getData = async () => {
+  todoArr = [];
+  const q = query(collection(db, "users"), orderBy("time", "desc"));
+  const querySnapshot = await getDocs(q);
+  querySnapshot.forEach((doc) => {
+    todoArr.push({ ...doc.data(), id: doc.id });
+  });
+  renderTodoList();
+}
+getData();
+
+
+const renderTodoList = async () => {
   lists.innerHTML = '';
-  for (let i = 0; i < todoArr.length; i++) {
-    lists.innerHTML += `<li>
-                <div id="lists-text">
-                    ${todoArr[i]}
-                </div>
-                <div id="lists-btn">
-                    <button id="delete" onclick="todoDelete(${i})">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                    <button id="edit" onclick="todoEdit(${i})">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                </div>
-            </li>`;
+
+  if (todoArr.length === 0) {
+    lists.innerHTML = `<li>No Data Found!</li>`;
+    return;
   }
-  todoInput.value = '';
-}
 
-todoBtn.addEventListener('click', () => {
-  if (todoInput.value === "") {
-    alert("Write Something");
-  } else {
-    lists.innerHTML = '';
-    todoArr.push(todoInput.value);
-    console.log(todoArr);
+  todoArr.map((item) => {
+    lists.innerHTML += `
+      <li>
+          <div id="lists-text">
+            ${item.todo}
+          </div>
+          <div id="lists-btn">
+          <button id="delete">
+              <i class="fa-solid fa-xmark"></i>
+          </button>
+          <button id="edit">
+            <i class="fa-solid fa-pen"></i>
+          </button>
+          </div>
+      </li>
+      `;
+
+  });
+  const delBtn = document.querySelectorAll("#delete");
+  const editBtn = document.querySelectorAll("#edit");
+
+  delBtn.forEach((btn, index) => {
+    btn.addEventListener("click", async () => {
+      todoArr.splice(index, 1);
+      await deleteDoc(doc(db, "users", todoArr[index].id));
+      console.log("Data deleted");
+      window.location.reload();
+    });
+  });
+
+  editBtn.forEach((btn, index) => {
+    btn.addEventListener('click', async () => {
+      const updatedNewValue = prompt("enter new value");
+      const todoUpdate = doc(db, "users", todoArr[index].id);
+      await updateDoc(todoUpdate, {
+        todo: updatedNewValue,
+      });
+      console.log("Data updated");
+      todoArr[index].todo = updatedNewValue;
+      window.location.reload();
+    });
+  });
+}
+renderTodoList();
+
+todoBtn.addEventListener('click', async (event) => {
+  lists.innerHTML = '';
+  event.preventDefault();
+  try {
+    const docRef = await addDoc(collection(db, "users"), {
+      todo: todoInput.value,
+      time: Timestamp.fromDate(new Date()),
+    });
+    console.log("Document written with ID: ", docRef.id);
+    todoArr.push({
+      todo: todo.value,
+      id: docRef.id,
+    });
+    renderTodoList();
+    todoInput.value = '';
+    window.location.reload();
+  } catch (e) {
+    console.error("Error adding document: ", e);
   }
-  renderTodoList();
-})
-
-function todoDelete(index) {
-  todoArr.splice(index, 1)
-  renderTodoList();
-}
-
-function todoEdit(index) {
-  const editedValue = prompt('Enter your new value');
-  todoArr.splice(index, 1, editedValue);
-  renderTodoList();
-}
+});
